@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Low Poly Racer</title>
+</head>
+<body>
+  <h1>🏎️ Low Poly Racer</h1>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    // Paste your Supabase details between the quotation marks:
+    const SUPABASE_URL = "https://jwywwssmccacfwoyuyhk.supabase.co";
+
+    const SUPABASE_ANON_KEY = "sb_publishable_2avVCzcEQeN46nMtW_oAIQ_Oz0pVuoq"
+
+    // Connects your game to Supabase
+    const supabaseClient = supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY
+    );
+
+    console.log("Supabase is connected!");
+  </script>
+</body>
+</html>
