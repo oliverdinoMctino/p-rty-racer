@@ -6,18 +6,27 @@
   <title>Low Poly Racer</title>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
       font-family: Arial, sans-serif;
       color: white;
       background: linear-gradient(135deg, #14213d, #1b4965);
+    }
+
+    .screen {
+      min-height: 100vh;
       display: grid;
       place-items: center;
+      padding: 20px;
     }
 
     .panel {
-      width: min(420px, 90%);
+      width: min(430px, 95%);
       padding: 28px;
       border-radius: 18px;
       background: #ffffff18;
@@ -25,10 +34,11 @@
       backdrop-filter: blur(8px);
     }
 
-    h1 { margin-top: 0; }
+    h1, h2 {
+      margin-top: 0;
+    }
 
-    input, button {
-      box-sizing: border-box;
+    input, select, button {
       width: 100%;
       padding: 12px;
       margin: 7px 0;
@@ -37,8 +47,9 @@
       font-size: 16px;
     }
 
-    input {
+    input, select {
       background: white;
+      color: #152238;
     }
 
     button {
@@ -52,12 +63,17 @@
       background: #ffd166;
     }
 
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
     #message {
       min-height: 24px;
       color: #ffe08a;
     }
 
-    #lobby {
+    #lobby, #raceScreen {
       display: none;
     }
 
@@ -68,17 +84,50 @@
     }
 
     li {
-      padding: 6px;
+      padding: 7px;
       background: #ffffff12;
       margin: 5px 0;
       border-radius: 6px;
+      list-style: none;
+    }
+
+    ul {
+      padding-left: 0;
+    }
+
+    #raceScreen {
+      position: fixed;
+      inset: 0;
+      background: #87ceeb;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #raceInfo {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      max-width: 280px;
+      padding: 14px;
+      border-radius: 12px;
+      background: #102033cc;
+      box-shadow: 0 4px 15px #0006;
+    }
+
+    #raceInfo p {
+      margin: 6px 0;
     }
   </style>
 </head>
 
 <body>
-  <main class="panel">
-    <section id="menu">
+  <!-- MENU -->
+  <main class="screen" id="menuScreen">
+    <section class="panel" id="menu">
       <h1>🏎️ Low Poly Racer</h1>
 
       <input id="nameInput" maxlength="12" placeholder="Choose a nickname" />
@@ -99,22 +148,57 @@
       <p id="message"></p>
     </section>
 
-    <section id="lobby">
+    <!-- LOBBY -->
+    <section class="panel" id="lobby">
       <h2>Race Lobby</h2>
+
       <p>Party code: <strong id="partyCode"></strong></p>
+
+      <label for="trackSelect"><strong>Choose a track</strong></label>
+
+      <select id="trackSelect">
+        <option value="monaco">Monaco — Monte Carlo</option>
+        <option value="suzuka">Suzuka — Japan</option>
+        <option value="cota">Circuit of the Americas — USA</option>
+        <option value="interlagos">Interlagos — Brazil</option>
+        <option value="monza">Monza — Italy</option>
+        <option value="silverstone">Silverstone — Great Britain</option>
+      </select>
+
+      <button id="startButton">Start Race</button>
+
+      <p id="hostMessage"></p>
 
       <h3>Players</h3>
       <ul id="playerList"></ul>
 
-      <p>Share the code with your friends!</p>
+      <p>Share the party code with your friends!</p>
     </section>
   </main>
 
+  <!-- RACE SCREEN -->
+  <section id="raceScreen">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="raceInfo">
+      <h2 id="trackTitle">Race</h2>
+      <p>🏁 The race has started!</p>
+      <p>This is the first 3D track viewer.</p>
+      <p>Next, we can add cars, driving, laps, and a finish line.</p>
+    </div>
+  </section>
+
+  <!-- Supabase and Three.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
   <script>
-    // Your Supabase connection details
+    // -----------------------------
+    // SUPABASE CONNECTION
+    // -----------------------------
     const SUPABASE_URL = "https://jwywwssmccacfwoyuyhk.supabase.co";
+
+    // Put your own publishable key between these quotation marks:
     const SUPABASE_ANON_KEY = "sb_publishable_2avVCzcEQeN46nMtW_oAIQ_Oz0pVuoq";
 
     const supabaseClient = supabase.createClient(
@@ -122,7 +206,17 @@
       SUPABASE_ANON_KEY
     );
 
+    // Gives this browser its own player ID.
+    let playerId = localStorage.getItem("lowPolyRacerPlayerId");
+
+    if (!playerId) {
+      playerId = crypto.randomUUID();
+      localStorage.setItem("lowPolyRacerPlayerId", playerId);
+    }
+
     let currentPartyCode = null;
+    let currentParty = null;
+    let gameStarted = false;
 
     const nameInput = document.getElementById("nameInput");
     const codeInput = document.getElementById("codeInput");
@@ -131,7 +225,13 @@
     const lobby = document.getElementById("lobby");
     const partyCodeText = document.getElementById("partyCode");
     const playerList = document.getElementById("playerList");
+    const trackSelect = document.getElementById("trackSelect");
+    const startButton = document.getElementById("startButton");
+    const hostMessage = document.getElementById("hostMessage");
 
+    // -----------------------------
+    // PARTY LOBBY
+    // -----------------------------
     function makePartyCode() {
       const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
       const numbers = "23456789";
@@ -168,7 +268,12 @@
 
       const { error: partyError } = await supabaseClient
         .from("parties")
-        .insert({ code: code });
+        .insert({
+          code: code,
+          host_id: playerId,
+          status: "lobby",
+          track: "monaco"
+        });
 
       if (partyError) {
         message.textContent = "That code was busy. Click Create Party again.";
@@ -187,7 +292,12 @@
         return;
       }
 
-      openLobby(code);
+      openLobby({
+        code: code,
+        host_id: playerId,
+        status: "lobby",
+        track: "monaco"
+      });
     }
 
     async function joinParty() {
@@ -205,12 +315,17 @@
 
       const { data: party, error } = await supabaseClient
         .from("parties")
-        .select("code")
+        .select("*")
         .eq("code", code)
         .maybeSingle();
 
       if (error || !party) {
         message.textContent = "Party not found. Check the code.";
+        return;
+      }
+
+      if (party.status === "racing") {
+        message.textContent = "That race has already started.";
         return;
       }
 
@@ -226,17 +341,32 @@
         return;
       }
 
-      openLobby(code);
+      openLobby(party);
     }
 
-    function openLobby(code) {
-      currentPartyCode = code;
+    function openLobby(party) {
+      currentParty = party;
+      currentPartyCode = party.code;
+
       menu.style.display = "none";
       lobby.style.display = "block";
-      partyCodeText.textContent = code;
+
+      partyCodeText.textContent = party.code;
+      trackSelect.value = party.track || "monaco";
+
+      const isHost = party.host_id === playerId;
+
+      // Only the creator can choose a track or start.
+      trackSelect.disabled = !isHost;
+      startButton.style.display = isHost ? "block" : "none";
+
+      hostMessage.textContent = isHost
+        ? "You created this party. Choose a track and start when ready!"
+        : "Waiting for the party creator to start the race...";
 
       loadPlayers();
       listenForPlayers();
+      listenForRaceStart();
     }
 
     async function loadPlayers() {
@@ -247,23 +377,19 @@
         .order("joined_at");
 
       if (!error) {
-        showPlayers(players);
-      }
-    }
+        playerList.innerHTML = "";
 
-    function showPlayers(players) {
-      playerList.innerHTML = "";
-
-      for (const player of players) {
-        const item = document.createElement("li");
-        item.textContent = "🏁 " + player.player_name;
-        playerList.appendChild(item);
+        for (const player of players) {
+          const item = document.createElement("li");
+          item.textContent = "🏁 " + player.player_name;
+          playerList.appendChild(item);
+        }
       }
     }
 
     function listenForPlayers() {
       supabaseClient
-        .channel("party-" + currentPartyCode)
+        .channel("players-" + currentPartyCode)
         .on(
           "postgres_changes",
           {
@@ -277,6 +403,55 @@
         .subscribe();
     }
 
+    async function startRace() {
+      const selectedTrack = trackSelect.value;
+
+      // This checks that this browser belongs to the host.
+      if (currentParty.host_id !== playerId) {
+        return;
+      }
+
+      startButton.disabled = true;
+      startButton.textContent = "Starting...";
+
+      const { error } = await supabaseClient
+        .from("parties")
+        .update({
+          status: "racing",
+          track: selectedTrack
+        })
+        .eq("code", currentPartyCode)
+        .eq("host_id", playerId);
+
+      if (error) {
+        startButton.disabled = false;
+        startButton.textContent = "Start Race";
+        hostMessage.textContent = "Could not start the race. Try again.";
+      }
+    }
+
+    function listenForRaceStart() {
+      supabaseClient
+        .channel("party-" + currentPartyCode)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "parties",
+            filter: "code=eq." + currentPartyCode
+          },
+          (change) => {
+            const updatedParty = change.new;
+
+            if (updatedParty.status === "racing" && !gameStarted) {
+              openRace(updatedParty.track);
+            }
+          }
+        )
+        .subscribe();
+    }
+
     document
       .getElementById("createButton")
       .addEventListener("click", createParty);
@@ -284,6 +459,251 @@
     document
       .getElementById("joinButton")
       .addEventListener("click", joinParty);
+
+    startButton.addEventListener("click", startRace);
+
+    // -----------------------------
+    // 3D LOW-POLY TRACKS
+    // Each track is a simplified, original layout.
+    // Coordinates use X and Z because Y is height.
+    // -----------------------------
+    const tracks = {
+      monaco: {
+        name: "Monaco — Monte Carlo",
+        points: [
+          [-28, -8], [-20, -18], [-6, -21], [10, -18],
+          [20, -10], [23, 2], [16, 11], [5, 14],
+          [-4, 20], [-18, 18], [-24, 8], [-17, 0],
+          [-5, 1], [7, 5], [12, -2], [4, -8],
+          [-10, -7], [-20, -2]
+        ]
+      },
+
+      suzuka: {
+        name: "Suzuka — Japan",
+        points: [
+          [-24, -15], [-11, -23], [8, -21], [20, -12],
+          [14, -3], [3, 0], [-6, 7], [-2, 17],
+          [12, 20], [23, 13], [24, 2], [16, -5],
+          [5, -3], [-4, 4], [-13, 9], [-22, 4],
+          [-25, -6], [-17, -11], [-5, -11], [5, -14]
+        ]
+      },
+
+      cota: {
+        name: "Circuit of the Americas — USA",
+        points: [
+          [-28, -14], [-12, -22], [5, -22], [22, -13],
+          [25, 2], [16, 16], [4, 22], [-8, 19],
+          [-3, 9], [10, 7], [15, -1], [6, -9],
+          [-7, -6], [-16, 4], [-24, 14], [-29, 5],
+          [-22, -4], [-11, -10]
+        ]
+      },
+
+      interlagos: {
+        name: "Interlagos — Brazil",
+        points: [
+          [-27, -10], [-17, -22], [2, -23], [18, -15],
+          [25, -2], [17, 10], [5, 16], [-8, 12],
+          [-1, 3], [13, 1], [17, -7], [7, -13],
+          [-7, -10], [-15, -1], [-23, 7], [-29, 1]
+        ]
+      },
+
+      monza: {
+        name: "Monza — Italy",
+        points: [
+          [-30, -10], [-15, -20], [15, -20], [28, -10],
+          [24, -2], [7, -1], [2, 7], [12, 15],
+          [25, 12], [28, 20], [12, 24], [-8, 20],
+          [-18, 10], [-8, 2], [5, 3], [8, -7],
+          [-7, -11], [-24, -3]
+        ]
+      },
+
+      silverstone: {
+        name: "Silverstone — Great Britain",
+        points: [
+          [-30, -7], [-18, -18], [-2, -22], [15, -17],
+          [26, -7], [21, 5], [9, 10], [15, 19],
+          [2, 23], [-12, 18], [-20, 9], [-10, 4],
+          [3, 5], [8, -3], [-4, -9], [-17, -5],
+          [-25, 4], [-30, 0]
+        ]
+      }
+    };
+
+    let renderer;
+    let scene;
+    let camera;
+
+    function openRace(trackId) {
+      gameStarted = true;
+
+      document.getElementById("menuScreen").style.display = "none";
+      document.getElementById("raceScreen").style.display = "block";
+
+      const track = tracks[trackId] || tracks.monaco;
+      document.getElementById("trackTitle").textContent = track.name;
+
+      build3DTrack(track);
+    }
+
+    function build3DTrack(track) {
+      const canvas = document.getElementById("gameCanvas");
+
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true
+      });
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87ceeb);
+
+      camera = new THREE.PerspectiveCamera(
+        55,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        300
+      );
+
+      // A high camera so players can see the whole track.
+      camera.position.set(0, 65, 55);
+      camera.lookAt(0, 0, 0);
+
+      // Sunlight
+      const sun = new THREE.DirectionalLight(0xffffff, 2);
+      sun.position.set(20, 50, 20);
+      scene.add(sun);
+
+      scene.add(new THREE.HemisphereLight(0xbfe8ff, 0x356b31, 2));
+
+      // Green ground
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(150, 150),
+        new THREE.MeshStandardMaterial({ color: 0x4f9b4a })
+      );
+
+      ground.rotation.x = -Math.PI / 2;
+      scene.add(ground);
+
+      // Track road
+      makeRoad(track.points);
+
+      // A few low-poly trees
+      for (let i = 0; i < 35; i++) {
+        const x = Math.random() * 120 - 60;
+        const z = Math.random() * 120 - 60;
+
+        const tree = new THREE.Group();
+
+        const trunk = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.4, 0.6, 3, 5),
+          new THREE.MeshStandardMaterial({ color: 0x6e4425 })
+        );
+
+        trunk.position.y = 1.5;
+
+        const leaves = new THREE.Mesh(
+          new THREE.ConeGeometry(2.2, 6, 5),
+          new THREE.MeshStandardMaterial({ color: 0x176d35 })
+        );
+
+        leaves.position.y = 5;
+
+        tree.add(trunk);
+        tree.add(leaves);
+        tree.position.set(x, 0, z);
+        scene.add(tree);
+      }
+
+      animate();
+      window.addEventListener("resize", resizeGame);
+    }
+
+    function makeRoad(points) {
+      const roadWidth = 5;
+      const vertices = [];
+      const indices = [];
+
+      for (let i = 0; i < points.length; i++) {
+        const previous = points[(i - 1 + points.length) % points.length];
+        const next = points[(i + 1) % points.length];
+
+        const dx = next[0] - previous[0];
+        const dz = next[1] - previous[1];
+        const length = Math.sqrt(dx * dx + dz * dz);
+
+        // A sideways direction from the track direction.
+        const sideX = -dz / length;
+        const sideZ = dx / length;
+
+        const leftX = points[i][0] + sideX * roadWidth;
+        const leftZ = points[i][1] + sideZ * roadWidth;
+
+        const rightX = points[i][0] - sideX * roadWidth;
+        const rightZ = points[i][1] - sideZ * roadWidth;
+
+        vertices.push(leftX, 0.15, leftZ);
+        vertices.push(rightX, 0.15, rightZ);
+      }
+
+      for (let i = 0; i < points.length; i++) {
+        const next = (i + 1) % points.length;
+
+        indices.push(i * 2, i * 2 + 1, next * 2);
+        indices.push(i * 2 + 1, next * 2 + 1, next * 2);
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(vertices, 3)
+      );
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+
+      const road = new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({
+          color: 0x30343b,
+          roughness: 0.9
+        })
+      );
+
+      scene.add(road);
+
+      // Start/finish line at the first track point
+      const start = points[0];
+
+      const line = new THREE.Mesh(
+        new THREE.BoxGeometry(10, 0.2, 1),
+        new THREE.MeshStandardMaterial({ color: 0xffffff })
+      );
+
+      line.position.set(start[0], 0.3, start[1]);
+      scene.add(line);
+    }
+
+    function resizeGame() {
+      if (!renderer || !camera) return;
+
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    }
   </script>
 </body>
 </html>
