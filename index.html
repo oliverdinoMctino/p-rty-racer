@@ -12,7 +12,6 @@
 
     body {
       margin: 0;
-      min-height: 100vh;
       font-family: Arial, sans-serif;
       color: white;
       background: linear-gradient(135deg, #14213d, #1b4965);
@@ -26,7 +25,7 @@
     }
 
     .panel {
-      width: min(430px, 95%);
+      width: min(440px, 95%);
       padding: 28px;
       border-radius: 18px;
       background: #ffffff18;
@@ -34,7 +33,7 @@
       backdrop-filter: blur(8px);
     }
 
-    h1, h2 {
+    h1, h2, h3 {
       margin-top: 0;
     }
 
@@ -64,35 +63,35 @@
     }
 
     button:disabled {
+      opacity: 0.5;
       cursor: not-allowed;
-      opacity: 0.55;
     }
 
     #message {
-      min-height: 24px;
+      min-height: 25px;
       color: #ffe08a;
     }
 
-    #lobby, #raceScreen {
+    #lobby, #raceScreen, #finishScreen {
       display: none;
     }
 
     #partyCode {
+      color: #ffb703;
       font-size: 28px;
       letter-spacing: 4px;
-      color: #ffb703;
-    }
-
-    li {
-      padding: 7px;
-      background: #ffffff12;
-      margin: 5px 0;
-      border-radius: 6px;
-      list-style: none;
     }
 
     ul {
-      padding-left: 0;
+      padding: 0;
+    }
+
+    li {
+      list-style: none;
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 7px;
+      background: #ffffff15;
     }
 
     #raceScreen {
@@ -107,31 +106,76 @@
       height: 100%;
     }
 
-    #raceInfo {
+    #hud {
       position: fixed;
-      top: 16px;
-      left: 16px;
-      max-width: 280px;
+      top: 15px;
+      left: 15px;
+      min-width: 220px;
       padding: 14px;
       border-radius: 12px;
-      background: #102033cc;
-      box-shadow: 0 4px 15px #0006;
+      background: #102033dd;
+      box-shadow: 0 4px 15px #0008;
     }
 
-    #raceInfo p {
-      margin: 6px 0;
+    #hud h2 {
+      margin-bottom: 8px;
+      font-size: 18px;
+    }
+
+    #hud p {
+      margin: 5px 0;
+    }
+
+    #countdown {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: clamp(70px, 18vw, 180px);
+      font-weight: bold;
+      color: #ffb703;
+      text-shadow: 5px 5px 0 #152238;
+      pointer-events: none;
+    }
+
+    #finishScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      background: #102033e8;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .finish-box {
+      width: min(420px, 95%);
+      padding: 30px;
+      border-radius: 18px;
+      text-align: center;
+      background: #1f4968;
+      box-shadow: 0 10px 30px #0009;
+    }
+
+    .finish-box h1 {
+      color: #ffb703;
+      font-size: 42px;
+    }
+
+    .help {
+      color: #d6efff;
+      font-size: 14px;
+      line-height: 1.5;
     }
   </style>
 </head>
 
 <body>
-  <!-- MENU -->
+  <!-- MAIN MENU -->
   <main class="screen" id="menuScreen">
     <section class="panel" id="menu">
       <h1>🏎️ Low Poly Racer</h1>
 
       <input id="nameInput" maxlength="12" placeholder="Choose a nickname" />
-
       <button id="createButton">Create Party</button>
 
       <hr />
@@ -144,7 +188,6 @@
       />
 
       <button id="joinButton">Join Party</button>
-
       <p id="message"></p>
     </section>
 
@@ -155,7 +198,6 @@
       <p>Party code: <strong id="partyCode"></strong></p>
 
       <label for="trackSelect"><strong>Choose a track</strong></label>
-
       <select id="trackSelect">
         <option value="monaco">Monaco — Monte Carlo</option>
         <option value="suzuka">Suzuka — Japan</option>
@@ -165,6 +207,20 @@
         <option value="silverstone">Silverstone — Great Britain</option>
       </select>
 
+      <label for="lapsSelect"><strong>Number of laps</strong></label>
+      <select id="lapsSelect">
+        <option value="1">1 lap</option>
+        <option value="2">2 laps</option>
+        <option value="3" selected>3 laps</option>
+        <option value="4">4 laps</option>
+        <option value="5">5 laps</option>
+        <option value="6">6 laps</option>
+        <option value="7">7 laps</option>
+        <option value="8">8 laps</option>
+        <option value="9">9 laps</option>
+        <option value="10">10 laps</option>
+      </select>
+
       <button id="startButton">Start Race</button>
 
       <p id="hostMessage"></p>
@@ -172,33 +228,47 @@
       <h3>Players</h3>
       <ul id="playerList"></ul>
 
-      <p>Share the party code with your friends!</p>
+      <p class="help">
+        The party creator chooses the track and number of laps.
+      </p>
     </section>
   </main>
 
-  <!-- RACE SCREEN -->
+  <!-- RACE -->
   <section id="raceScreen">
     <canvas id="gameCanvas"></canvas>
 
-    <div id="raceInfo">
+    <div id="hud">
       <h2 id="trackTitle">Race</h2>
-      <p>🏁 The race has started!</p>
-      <p>This is the first 3D track viewer.</p>
-      <p>Next, we can add cars, driving, laps, and a finish line.</p>
+      <p id="lapText">Lap: 1 / 3</p>
+      <p id="speedText">Speed: 0</p>
+      <p class="help">Drive: WASD or arrow keys</p>
+      <p class="help">Stay on the road!</p>
+    </div>
+
+    <div id="countdown"></div>
+  </section>
+
+  <!-- FINISH SCREEN -->
+  <section id="finishScreen">
+    <div class="finish-box">
+      <h1>🏁 FINISH!</h1>
+      <h2 id="finishMessage">Great race!</h2>
+      <p id="finishTime"></p>
+      <button onclick="location.reload()">Return to Menu</button>
     </div>
   </section>
 
-  <!-- Supabase and Three.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
   <script>
-    // -----------------------------
-    // SUPABASE CONNECTION
-    // -----------------------------
+    // =====================================
+    // SUPABASE
+    // =====================================
     const SUPABASE_URL = "https://jwywwssmccacfwoyuyhk.supabase.co";
 
-    // Put your own publishable key between these quotation marks:
+    // PASTE YOUR REAL PUBLISHABLE KEY HERE:
     const SUPABASE_ANON_KEY = "sb_publishable_2avVCzcEQeN46nMtW_oAIQ_Oz0pVuoq";
 
     const supabaseClient = supabase.createClient(
@@ -206,7 +276,6 @@
       SUPABASE_ANON_KEY
     );
 
-    // Gives this browser its own player ID.
     let playerId = localStorage.getItem("lowPolyRacerPlayerId");
 
     if (!playerId) {
@@ -214,8 +283,8 @@
       localStorage.setItem("lowPolyRacerPlayerId", playerId);
     }
 
-    let currentPartyCode = null;
     let currentParty = null;
+    let currentPartyCode = null;
     let gameStarted = false;
 
     const nameInput = document.getElementById("nameInput");
@@ -226,12 +295,13 @@
     const partyCodeText = document.getElementById("partyCode");
     const playerList = document.getElementById("playerList");
     const trackSelect = document.getElementById("trackSelect");
+    const lapsSelect = document.getElementById("lapsSelect");
     const startButton = document.getElementById("startButton");
     const hostMessage = document.getElementById("hostMessage");
 
-    // -----------------------------
-    // PARTY LOBBY
-    // -----------------------------
+    // =====================================
+    // PARTY CODE FUNCTIONS
+    // =====================================
     function makePartyCode() {
       const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
       const numbers = "23456789";
@@ -264,6 +334,7 @@
       if (!playerName) return;
 
       message.textContent = "Creating party...";
+
       const code = makePartyCode();
 
       const { error: partyError } = await supabaseClient
@@ -272,7 +343,8 @@
           code: code,
           host_id: playerId,
           status: "lobby",
-          track: "monaco"
+          track: "monaco",
+          laps: 3
         });
 
       if (partyError) {
@@ -288,7 +360,7 @@
         });
 
       if (playerError) {
-        message.textContent = "Party was made, but you could not join it.";
+        message.textContent = "Party made, but you could not join.";
         return;
       }
 
@@ -296,7 +368,8 @@
         code: code,
         host_id: playerId,
         status: "lobby",
-        track: "monaco"
+        track: "monaco",
+        laps: 3
       });
     }
 
@@ -353,16 +426,17 @@
 
       partyCodeText.textContent = party.code;
       trackSelect.value = party.track || "monaco";
+      lapsSelect.value = party.laps || 3;
 
       const isHost = party.host_id === playerId;
 
-      // Only the creator can choose a track or start.
       trackSelect.disabled = !isHost;
+      lapsSelect.disabled = !isHost;
       startButton.style.display = isHost ? "block" : "none";
 
       hostMessage.textContent = isHost
-        ? "You created this party. Choose a track and start when ready!"
-        : "Waiting for the party creator to start the race...";
+        ? "You are the host. Choose the track, laps, then start!"
+        : "Waiting for the host to start the race...";
 
       loadPlayers();
       listenForPlayers();
@@ -376,14 +450,14 @@
         .eq("party_code", currentPartyCode)
         .order("joined_at");
 
-      if (!error) {
-        playerList.innerHTML = "";
+      if (error) return;
 
-        for (const player of players) {
-          const item = document.createElement("li");
-          item.textContent = "🏁 " + player.player_name;
-          playerList.appendChild(item);
-        }
+      playerList.innerHTML = "";
+
+      for (const player of players) {
+        const item = document.createElement("li");
+        item.textContent = "🏁 " + player.player_name;
+        playerList.appendChild(item);
       }
     }
 
@@ -404,29 +478,32 @@
     }
 
     async function startRace() {
-      const selectedTrack = trackSelect.value;
-
-      // This checks that this browser belongs to the host.
-      if (currentParty.host_id !== playerId) {
-        return;
-      }
+      if (currentParty.host_id !== playerId) return;
 
       startButton.disabled = true;
       startButton.textContent = "Starting...";
+
+      const selectedTrack = trackSelect.value;
+      const selectedLaps = Number(lapsSelect.value);
+
+      // Race starts 4 seconds from now for the countdown.
+      const startTime = new Date(Date.now() + 4000).toISOString();
 
       const { error } = await supabaseClient
         .from("parties")
         .update({
           status: "racing",
-          track: selectedTrack
+          track: selectedTrack,
+          laps: selectedLaps,
+          race_started_at: startTime
         })
         .eq("code", currentPartyCode)
         .eq("host_id", playerId);
 
       if (error) {
+        hostMessage.textContent = "Could not start. Try again.";
         startButton.disabled = false;
         startButton.textContent = "Start Race";
-        hostMessage.textContent = "Could not start the race. Try again.";
       }
     }
 
@@ -442,31 +519,28 @@
             filter: "code=eq." + currentPartyCode
           },
           (change) => {
-            const updatedParty = change.new;
+            const party = change.new;
 
-            if (updatedParty.status === "racing" && !gameStarted) {
-              openRace(updatedParty.track);
+            if (party.status === "racing" && !gameStarted) {
+              openRace(party.track, party.laps, party.race_started_at);
             }
           }
         )
         .subscribe();
     }
 
-    document
-      .getElementById("createButton")
+    document.getElementById("createButton")
       .addEventListener("click", createParty);
 
-    document
-      .getElementById("joinButton")
+    document.getElementById("joinButton")
       .addEventListener("click", joinParty);
 
     startButton.addEventListener("click", startRace);
 
-    // -----------------------------
-    // 3D LOW-POLY TRACKS
-    // Each track is a simplified, original layout.
-    // Coordinates use X and Z because Y is height.
-    // -----------------------------
+    // =====================================
+    // TRACKS
+    // Original, simplified game tracks.
+    // =====================================
     const tracks = {
       monaco: {
         name: "Monaco — Monte Carlo",
@@ -534,23 +608,53 @@
       }
     };
 
+    // =====================================
+    // 3D GAME VARIABLES
+    // =====================================
     let renderer;
     let scene;
     let camera;
+    let car;
+    let carShadow;
 
-    function openRace(trackId) {
+    let activeTrack;
+    let activeLaps = 3;
+    let raceStartTime = 0;
+    let raceFinished = false;
+
+    const keys = {};
+    const carState = {
+      x: 0,
+      z: 0,
+      angle: 0,
+      speed: 0,
+      lap: 1,
+      nextCheckpoint: 1
+    };
+
+    const ROAD_HALF_WIDTH = 5;
+    const MAX_SPEED = 24;
+    const ACCELERATION = 17;
+    const BRAKE_POWER = 25;
+    const TURN_SPEED = 2.5;
+
+    // =====================================
+    // START RACE
+    // =====================================
+    function openRace(trackId, laps, startedAt) {
       gameStarted = true;
+      activeTrack = tracks[trackId] || tracks.monaco;
+      activeLaps = laps || 3;
+      raceStartTime = new Date(startedAt).getTime();
 
       document.getElementById("menuScreen").style.display = "none";
       document.getElementById("raceScreen").style.display = "block";
+      document.getElementById("trackTitle").textContent = activeTrack.name;
 
-      const track = tracks[trackId] || tracks.monaco;
-      document.getElementById("trackTitle").textContent = track.name;
-
-      build3DTrack(track);
+      buildGame();
     }
 
-    function build3DTrack(track) {
+    function buildGame() {
       const canvas = document.getElementById("gameCanvas");
 
       renderer = new THREE.WebGLRenderer({
@@ -563,46 +667,246 @@
 
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x87ceeb);
+      scene.fog = new THREE.Fog(0x87ceeb, 70, 150);
 
       camera = new THREE.PerspectiveCamera(
-        55,
+        60,
         window.innerWidth / window.innerHeight,
         0.1,
         300
       );
 
-      // A high camera so players can see the whole track.
-      camera.position.set(0, 65, 55);
-      camera.lookAt(0, 0, 0);
-
-      // Sunlight
-      const sun = new THREE.DirectionalLight(0xffffff, 2);
-      sun.position.set(20, 50, 20);
+      // Light
+      const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+      sun.position.set(30, 55, 20);
       scene.add(sun);
 
-      scene.add(new THREE.HemisphereLight(0xbfe8ff, 0x356b31, 2));
+      scene.add(new THREE.HemisphereLight(0xc9f1ff, 0x356b31, 2));
 
-      // Green ground
+      // Ground
       const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(150, 150),
+        new THREE.PlaneGeometry(180, 180),
         new THREE.MeshStandardMaterial({ color: 0x4f9b4a })
       );
 
       ground.rotation.x = -Math.PI / 2;
       scene.add(ground);
 
-      // Track road
-      makeRoad(track.points);
+      makeRoad(activeTrack.points);
+      makeTrees();
+      makeCar();
+      placeCarAtStart();
 
-      // A few low-poly trees
-      for (let i = 0; i < 35; i++) {
-        const x = Math.random() * 120 - 60;
-        const z = Math.random() * 120 - 60;
+      window.addEventListener("resize", resizeGame);
+      document.addEventListener("keydown", keyDown);
+      document.addEventListener("keyup", keyUp);
+
+      animate();
+    }
+
+    // =====================================
+    // LOW-POLY CAR
+    // =====================================
+    function makeCar() {
+      car = new THREE.Group();
+
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(2.2, 0.65, 4),
+        new THREE.MeshStandardMaterial({
+          color: 0xff3030,
+          roughness: 0.6
+        })
+      );
+
+      body.position.y = 0.8;
+      car.add(body);
+
+      const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(1.55, 0.55, 1.85),
+        new THREE.MeshStandardMaterial({
+          color: 0x202a38,
+          roughness: 0.3
+        })
+      );
+
+      roof.position.set(0, 1.35, -0.2);
+      car.add(roof);
+
+      const wheelMaterial = new THREE.MeshStandardMaterial({
+        color: 0x151515
+      });
+
+      const wheelPositions = [
+        [-1.12, 0.45, -1.35],
+        [1.12, 0.45, -1.35],
+        [-1.12, 0.45, 1.35],
+        [1.12, 0.45, 1.35]
+      ];
+
+      for (const position of wheelPositions) {
+        const wheel = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.45, 0.45, 0.35, 8),
+          wheelMaterial
+        );
+
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(position[0], position[1], position[2]);
+        car.add(wheel);
+      }
+
+      scene.add(car);
+
+      carShadow = new THREE.Mesh(
+        new THREE.CircleGeometry(2.3, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.22
+        })
+      );
+
+      carShadow.rotation.x = -Math.PI / 2;
+      carShadow.position.y = 0.03;
+      scene.add(carShadow);
+    }
+
+    function placeCarAtStart() {
+      const first = activeTrack.points[0];
+      const second = activeTrack.points[1];
+
+      carState.x = first[0];
+      carState.z = first[1];
+
+      // Point car toward checkpoint 1.
+      carState.angle = Math.atan2(
+        second[0] - first[0],
+        second[1] - first[1]
+      );
+
+      carState.speed = 0;
+      carState.lap = 1;
+      carState.nextCheckpoint = 1;
+
+      updateCarMesh();
+    }
+
+    // =====================================
+    // ROAD, WALLS, TREES
+    // =====================================
+    function makeRoad(points) {
+      const roadWidth = ROAD_HALF_WIDTH;
+      const vertices = [];
+      const indices = [];
+
+      for (let i = 0; i < points.length; i++) {
+        const before = points[(i - 1 + points.length) % points.length];
+        const after = points[(i + 1) % points.length];
+
+        const dx = after[0] - before[0];
+        const dz = after[1] - before[1];
+        const length = Math.sqrt(dx * dx + dz * dz);
+
+        const sideX = -dz / length;
+        const sideZ = dx / length;
+
+        vertices.push(
+          points[i][0] + sideX * roadWidth, 0.15, points[i][1] + sideZ * roadWidth
+        );
+
+        vertices.push(
+          points[i][0] - sideX * roadWidth, 0.15, points[i][1] - sideZ * roadWidth
+        );
+      }
+
+      for (let i = 0; i < points.length; i++) {
+        const next = (i + 1) % points.length;
+
+        indices.push(i * 2, i * 2 + 1, next * 2);
+        indices.push(i * 2 + 1, next * 2 + 1, next * 2);
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(vertices, 3)
+      );
+
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+
+      const road = new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({
+          color: 0x30343b,
+          roughness: 0.95
+        })
+      );
+
+      scene.add(road);
+
+      // Build simple barrier blocks along the outside of the road.
+      for (let i = 0; i < points.length; i++) {
+        const before = points[(i - 1 + points.length) % points.length];
+        const after = points[(i + 1) % points.length];
+
+        const dx = after[0] - before[0];
+        const dz = after[1] - before[1];
+        const length = Math.sqrt(dx * dx + dz * dz);
+
+        const sideX = -dz / length;
+        const sideZ = dx / length;
+
+        for (const side of [-1, 1]) {
+          const barrier = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 1.1, 1.2),
+            new THREE.MeshStandardMaterial({
+              color: i % 2 === 0 ? 0xffffff : 0xe63946
+            })
+          );
+
+          barrier.position.set(
+            points[i][0] + sideX * (ROAD_HALF_WIDTH + 0.8) * side,
+            0.65,
+            points[i][1] + sideZ * (ROAD_HALF_WIDTH + 0.8) * side
+          );
+
+          scene.add(barrier);
+        }
+      }
+
+      // Finish line
+      const start = points[0];
+      const next = points[1];
+
+      const direction = Math.atan2(
+        next[0] - start[0],
+        next[1] - start[1]
+      );
+
+      const finishLine = new THREE.Mesh(
+        new THREE.BoxGeometry(ROAD_HALF_WIDTH * 2, 0.08, 1.1),
+        new THREE.MeshStandardMaterial({ color: 0xffffff })
+      );
+
+      finishLine.position.set(start[0], 0.28, start[1]);
+      finishLine.rotation.y = direction;
+      scene.add(finishLine);
+    }
+
+    function makeTrees() {
+      for (let i = 0; i < 45; i++) {
+        const x = Math.random() * 130 - 65;
+        const z = Math.random() * 130 - 65;
+
+        // Do not put trees too close to the road.
+        if (distanceToTrack(x, z) < ROAD_HALF_WIDTH + 4) {
+          continue;
+        }
 
         const tree = new THREE.Group();
 
         const trunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.4, 0.6, 3, 5),
+          new THREE.CylinderGeometry(0.4, 0.65, 3, 5),
           new THREE.MeshStandardMaterial({ color: 0x6e4425 })
         );
 
@@ -618,75 +922,280 @@
         tree.add(trunk);
         tree.add(leaves);
         tree.position.set(x, 0, z);
+
         scene.add(tree);
       }
-
-      animate();
-      window.addEventListener("resize", resizeGame);
     }
 
-    function makeRoad(points) {
-      const roadWidth = 5;
-      const vertices = [];
-      const indices = [];
+    // =====================================
+    // CAR CONTROLS
+    // =====================================
+    function keyDown(event) {
+      keys[event.key.toLowerCase()] = true;
 
-      for (let i = 0; i < points.length; i++) {
-        const previous = points[(i - 1 + points.length) % points.length];
-        const next = points[(i + 1) % points.length];
+      if ([
+        "arrowup",
+        "arrowdown",
+        "arrowleft",
+        "arrowright"
+      ].includes(event.key.toLowerCase())) {
+        event.preventDefault();
+      }
+    }
 
-        const dx = next[0] - previous[0];
-        const dz = next[1] - previous[1];
-        const length = Math.sqrt(dx * dx + dz * dz);
+    function keyUp(event) {
+      keys[event.key.toLowerCase()] = false;
+    }
 
-        // A sideways direction from the track direction.
-        const sideX = -dz / length;
-        const sideZ = dx / length;
+    function updateCar(delta) {
+      if (raceFinished) return;
 
-        const leftX = points[i][0] + sideX * roadWidth;
-        const leftZ = points[i][1] + sideZ * roadWidth;
+      const now = Date.now();
 
-        const rightX = points[i][0] - sideX * roadWidth;
-        const rightZ = points[i][1] - sideZ * roadWidth;
+      // Do not move before GO!
+      if (now < raceStartTime) return;
 
-        vertices.push(leftX, 0.15, leftZ);
-        vertices.push(rightX, 0.15, rightZ);
+      const forward = keys["w"] || keys["arrowup"];
+      const backward = keys["s"] || keys["arrowdown"];
+      const left = keys["a"] || keys["arrowleft"];
+      const right = keys["d"] || keys["arrowright"];
+
+      if (forward) {
+        carState.speed += ACCELERATION * delta;
       }
 
-      for (let i = 0; i < points.length; i++) {
-        const next = (i + 1) % points.length;
-
-        indices.push(i * 2, i * 2 + 1, next * 2);
-        indices.push(i * 2 + 1, next * 2 + 1, next * 2);
+      if (backward) {
+        carState.speed -= BRAKE_POWER * delta;
       }
 
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(vertices, 3)
+      // Natural slowing down when no key is held.
+      if (!forward && !backward) {
+        carState.speed *= Math.pow(0.92, delta * 60);
+      }
+
+      carState.speed = Math.max(-MAX_SPEED / 2, Math.min(MAX_SPEED, carState.speed));
+
+      // Steering works better while moving.
+      const turningAmount = TURN_SPEED * delta * (carState.speed / MAX_SPEED);
+
+      if (left) {
+        carState.angle += turningAmount;
+      }
+
+      if (right) {
+        carState.angle -= turningAmount;
+      }
+
+      const oldX = carState.x;
+      const oldZ = carState.z;
+
+      carState.x += Math.sin(carState.angle) * carState.speed * delta;
+      carState.z += Math.cos(carState.angle) * carState.speed * delta;
+
+      // If the car goes too far away from the track,
+      // move it back and slow it down.
+      const roadDistance = distanceToTrack(carState.x, carState.z);
+
+      if (roadDistance > ROAD_HALF_WIDTH) {
+        carState.speed *= 0.82;
+
+        const closest = closestPointOnTrack(carState.x, carState.z);
+        const pullBack = 0.08;
+
+        carState.x += (closest.x - carState.x) * pullBack;
+        carState.z += (closest.z - carState.z) * pullBack;
+      }
+
+      // Stops strange giant jumps.
+      if (Math.abs(carState.x - oldX) > 4 || Math.abs(carState.z - oldZ) > 4) {
+        carState.x = oldX;
+        carState.z = oldZ;
+      }
+
+      checkCheckpoint();
+      updateCarMesh();
+      updateCamera();
+    }
+
+    function updateCarMesh() {
+      car.position.set(carState.x, 0, carState.z);
+      car.rotation.y = carState.angle;
+
+      carShadow.position.set(carState.x, 0.035, carState.z);
+      carShadow.rotation.z = -carState.angle;
+    }
+
+    function updateCamera() {
+      const behindX = carState.x - Math.sin(carState.angle) * 16;
+      const behindZ = carState.z - Math.cos(carState.angle) * 16;
+
+      const targetPosition = new THREE.Vector3(
+        behindX,
+        15,
+        behindZ
       );
-      geometry.setIndex(indices);
-      geometry.computeVertexNormals();
 
-      const road = new THREE.Mesh(
-        geometry,
-        new THREE.MeshStandardMaterial({
-          color: 0x30343b,
-          roughness: 0.9
-        })
+      camera.position.lerp(targetPosition, 0.08);
+
+      camera.lookAt(
+        carState.x + Math.sin(carState.angle) * 7,
+        0,
+        carState.z + Math.cos(carState.angle) * 7
       );
+    }
 
-      scene.add(road);
+    // =====================================
+    // CHECKPOINTS AND LAPS
+    // =====================================
+    function checkCheckpoint() {
+      const checkpoint = activeTrack.points[carState.nextCheckpoint];
+      const dx = carState.x - checkpoint[0];
+      const dz = carState.z - checkpoint[1];
+      const distance = Math.sqrt(dx * dx + dz * dz);
 
-      // Start/finish line at the first track point
-      const start = points[0];
+      // The car must get close enough to the next point.
+      if (distance < 5) {
+        carState.nextCheckpoint++;
 
-      const line = new THREE.Mesh(
-        new THREE.BoxGeometry(10, 0.2, 1),
-        new THREE.MeshStandardMaterial({ color: 0xffffff })
-      );
+        if (carState.nextCheckpoint >= activeTrack.points.length) {
+          carState.nextCheckpoint = 0;
+        }
 
-      line.position.set(start[0], 0.3, start[1]);
-      scene.add(line);
+        // Reaching the start after every checkpoint means a lap is done.
+        if (carState.nextCheckpoint === 1) {
+          carState.lap++;
+
+          if (carState.lap > activeLaps) {
+            finishRace();
+          }
+        }
+      }
+    }
+
+    function finishRace() {
+      raceFinished = true;
+      carState.speed = 0;
+
+      const seconds = ((Date.now() - raceStartTime) / 1000).toFixed(1);
+
+      document.getElementById("finishScreen").style.display = "grid";
+      document.getElementById("finishMessage").textContent =
+        "You completed " + activeLaps + " lap" + (activeLaps === 1 ? "!" : "s!");
+
+      document.getElementById("finishTime").textContent =
+        "Your time: " + seconds + " seconds";
+    }
+
+    // =====================================
+    // TRACK DISTANCE / WALL SYSTEM
+    // =====================================
+    function closestPointOnTrack(x, z) {
+      let bestDistance = Infinity;
+      let bestPoint = { x: 0, z: 0 };
+
+      const points = activeTrack.points;
+
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+
+        const result = closestPointOnLineSegment(x, z, a[0], a[1], b[0], b[1]);
+
+        if (result.distance < bestDistance) {
+          bestDistance = result.distance;
+          bestPoint = { x: result.x, z: result.z };
+        }
+      }
+
+      return bestPoint;
+    }
+
+    function distanceToTrack(x, z) {
+      let bestDistance = Infinity;
+      const points = activeTrack.points;
+
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+
+        const result = closestPointOnLineSegment(x, z, a[0], a[1], b[0], b[1]);
+
+        if (result.distance < bestDistance) {
+          bestDistance = result.distance;
+        }
+      }
+
+      return bestDistance;
+    }
+
+    function closestPointOnLineSegment(px, pz, ax, az, bx, bz) {
+      const abx = bx - ax;
+      const abz = bz - az;
+
+      const apx = px - ax;
+      const apz = pz - az;
+
+      const lengthSquared = abx * abx + abz * abz;
+
+      let t = (apx * abx + apz * abz) / lengthSquared;
+      t = Math.max(0, Math.min(1, t));
+
+      const x = ax + abx * t;
+      const z = az + abz * t;
+
+      const dx = px - x;
+      const dz = pz - z;
+
+      return {
+        x: x,
+        z: z,
+        distance: Math.sqrt(dx * dx + dz * dz)
+      };
+    }
+
+    // =====================================
+    // COUNTDOWN / GAME LOOP
+    // =====================================
+    let previousTime = 0;
+
+    function animate(time = 0) {
+      requestAnimationFrame(animate);
+
+      const delta = Math.min((time - previousTime) / 1000, 0.05);
+      previousTime = time;
+
+      updateCountdown();
+      updateCar(delta);
+      updateHud();
+
+      renderer.render(scene, camera);
+    }
+
+    function updateCountdown() {
+      const countdown = document.getElementById("countdown");
+      const millisecondsLeft = raceStartTime - Date.now();
+
+      if (millisecondsLeft > 3000) {
+        countdown.textContent = "3";
+      } else if (millisecondsLeft > 2000) {
+        countdown.textContent = "2";
+      } else if (millisecondsLeft > 1000) {
+        countdown.textContent = "1";
+      } else if (millisecondsLeft > 0) {
+        countdown.textContent = "GO!";
+      } else {
+        countdown.textContent = "";
+      }
+    }
+
+    function updateHud() {
+      const shownLap = Math.min(carState.lap, activeLaps);
+
+      document.getElementById("lapText").textContent =
+        "Lap: " + shownLap + " / " + activeLaps;
+
+      document.getElementById("speedText").textContent =
+        "Speed: " + Math.round(Math.abs(carState.speed) * 10);
     }
 
     function resizeGame() {
@@ -695,14 +1204,6 @@
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      if (renderer && scene && camera) {
-        renderer.render(scene, camera);
-      }
     }
   </script>
 </body>
