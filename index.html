@@ -1,28 +1,289 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Low Poly Racer</title>
+
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      color: white;
+      background: linear-gradient(135deg, #14213d, #1b4965);
+      display: grid;
+      place-items: center;
+    }
+
+    .panel {
+      width: min(420px, 90%);
+      padding: 28px;
+      border-radius: 18px;
+      background: #ffffff18;
+      box-shadow: 0 8px 30px #0008;
+      backdrop-filter: blur(8px);
+    }
+
+    h1 { margin-top: 0; }
+
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 12px;
+      margin: 7px 0;
+      border: 0;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    input {
+      background: white;
+    }
+
+    button {
+      background: #ffb703;
+      color: #152238;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #ffd166;
+    }
+
+    #message {
+      min-height: 24px;
+      color: #ffe08a;
+    }
+
+    #lobby {
+      display: none;
+    }
+
+    #partyCode {
+      font-size: 28px;
+      letter-spacing: 4px;
+      color: #ffb703;
+    }
+
+    li {
+      padding: 6px;
+      background: #ffffff12;
+      margin: 5px 0;
+      border-radius: 6px;
+    }
+  </style>
 </head>
+
 <body>
-  <h1>🏎️ Low Poly Racer</h1>
+  <main class="panel">
+    <section id="menu">
+      <h1>🏎️ Low Poly Racer</h1>
+
+      <input id="nameInput" maxlength="12" placeholder="Choose a nickname" />
+
+      <button id="createButton">Create Party</button>
+
+      <hr />
+
+      <input
+        id="codeInput"
+        maxlength="6"
+        placeholder="Enter party code"
+        style="text-transform: uppercase;"
+      />
+
+      <button id="joinButton">Join Party</button>
+
+      <p id="message"></p>
+    </section>
+
+    <section id="lobby">
+      <h2>Race Lobby</h2>
+      <p>Party code: <strong id="partyCode"></strong></p>
+
+      <h3>Players</h3>
+      <ul id="playerList"></ul>
+
+      <p>Share the code with your friends!</p>
+    </section>
+  </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
-    // Paste your Supabase details between the quotation marks:
+    // Your Supabase connection details
     const SUPABASE_URL = "https://jwywwssmccacfwoyuyhk.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_2avVCzcEQeN46nMtW_oAIQ_Oz0pVuoq";
 
-    const SUPABASE_ANON_KEY = "sb_publishable_2avVCzcEQeN46nMtW_oAIQ_Oz0pVuoq"
-
-    // Connects your game to Supabase
     const supabaseClient = supabase.createClient(
       SUPABASE_URL,
       SUPABASE_ANON_KEY
     );
 
-    console.log("Supabase is connected!");
+    let currentPartyCode = null;
+
+    const nameInput = document.getElementById("nameInput");
+    const codeInput = document.getElementById("codeInput");
+    const message = document.getElementById("message");
+    const menu = document.getElementById("menu");
+    const lobby = document.getElementById("lobby");
+    const partyCodeText = document.getElementById("partyCode");
+    const playerList = document.getElementById("playerList");
+
+    function makePartyCode() {
+      const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+      const numbers = "23456789";
+      let code = "";
+
+      for (let i = 0; i < 4; i++) {
+        code += letters[Math.floor(Math.random() * letters.length)];
+      }
+
+      for (let i = 0; i < 2; i++) {
+        code += numbers[Math.floor(Math.random() * numbers.length)];
+      }
+
+      return code;
+    }
+
+    function getPlayerName() {
+      const name = nameInput.value.trim();
+
+      if (name.length < 2) {
+        message.textContent = "Choose a nickname with at least 2 letters.";
+        return null;
+      }
+
+      return name;
+    }
+
+    async function createParty() {
+      const playerName = getPlayerName();
+      if (!playerName) return;
+
+      message.textContent = "Creating party...";
+      const code = makePartyCode();
+
+      const { error: partyError } = await supabaseClient
+        .from("parties")
+        .insert({ code: code });
+
+      if (partyError) {
+        message.textContent = "That code was busy. Click Create Party again.";
+        return;
+      }
+
+      const { error: playerError } = await supabaseClient
+        .from("players")
+        .insert({
+          party_code: code,
+          player_name: playerName
+        });
+
+      if (playerError) {
+        message.textContent = "Party was made, but you could not join it.";
+        return;
+      }
+
+      openLobby(code);
+    }
+
+    async function joinParty() {
+      const playerName = getPlayerName();
+      if (!playerName) return;
+
+      const code = codeInput.value.trim().toUpperCase();
+
+      if (code.length !== 6) {
+        message.textContent = "Party codes have 6 characters.";
+        return;
+      }
+
+      message.textContent = "Looking for party...";
+
+      const { data: party, error } = await supabaseClient
+        .from("parties")
+        .select("code")
+        .eq("code", code)
+        .maybeSingle();
+
+      if (error || !party) {
+        message.textContent = "Party not found. Check the code.";
+        return;
+      }
+
+      const { error: joinError } = await supabaseClient
+        .from("players")
+        .insert({
+          party_code: code,
+          player_name: playerName
+        });
+
+      if (joinError) {
+        message.textContent = "Could not join the party.";
+        return;
+      }
+
+      openLobby(code);
+    }
+
+    function openLobby(code) {
+      currentPartyCode = code;
+      menu.style.display = "none";
+      lobby.style.display = "block";
+      partyCodeText.textContent = code;
+
+      loadPlayers();
+      listenForPlayers();
+    }
+
+    async function loadPlayers() {
+      const { data: players, error } = await supabaseClient
+        .from("players")
+        .select("player_name")
+        .eq("party_code", currentPartyCode)
+        .order("joined_at");
+
+      if (!error) {
+        showPlayers(players);
+      }
+    }
+
+    function showPlayers(players) {
+      playerList.innerHTML = "";
+
+      for (const player of players) {
+        const item = document.createElement("li");
+        item.textContent = "🏁 " + player.player_name;
+        playerList.appendChild(item);
+      }
+    }
+
+    function listenForPlayers() {
+      supabaseClient
+        .channel("party-" + currentPartyCode)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "players",
+            filter: "party_code=eq." + currentPartyCode
+          },
+          loadPlayers
+        )
+        .subscribe();
+    }
+
+    document
+      .getElementById("createButton")
+      .addEventListener("click", createParty);
+
+    document
+      .getElementById("joinButton")
+      .addEventListener("click", joinParty);
   </script>
 </body>
 </html>
