@@ -318,16 +318,19 @@
       return code;
     }
 
-    function getPlayerName() {
-      const name = nameInput.value.trim();
+function getPlayerName() {
+  const name = nameInput.value.trim();
 
-      if (name.length < 2) {
-        message.textContent = "Choose a nickname with at least 2 letters.";
-        return null;
-      }
+  if (name.length < 2) {
+    message.textContent = "Choose a nickname with at least 2 letters.";
+    return null;
+  }
 
-      return name;
-    }
+  // Save this nickname so it can appear above the car.
+  currentPlayerName = name;
+
+  return name;
+}
 
     async function createParty() {
       const playerName = getPlayerName();
@@ -611,11 +614,17 @@
     // =====================================
     // 3D GAME VARIABLES
     // =====================================
-    let renderer;
-    let scene;
-    let camera;
-    let car;
-    let carShadow;
+   let renderer;
+let scene;
+let camera;
+let car;
+let carShadow;
+
+// Cars belonging to friends:
+const remoteCars = new Map();
+
+let currentPlayerName = "";
+let carUpdateTimer = 0;
 
     let activeTrack;
     let activeLaps = 3;
@@ -652,6 +661,11 @@
       document.getElementById("trackTitle").textContent = activeTrack.name;
 
       buildGame();
+
+// Adds your car to the online race and listens for friends' cars.
+joinOnlineRace();
+listenForRemoteCars();
+
     }
 
     function buildGame() {
@@ -704,9 +718,234 @@
       animate();
     }
 
-    // =====================================
-    // LOW-POLY CAR
-    // =====================================
+   // =====================================
+// LIVE MULTIPLAYER CARS
+// =====================================
+
+// Makes a number from a player's browser ID.
+// It gives players slightly different starting positions.
+function getSpawnOffset() {
+  let number = 0;
+
+  for (let i = 0; i < playerId.length; i++) {
+    number += playerId.charCodeAt(i);
+  }
+
+  return (number % 5) * 2;
+}
+
+async function joinOnlineRace() {
+  // Move each car slightly behind the starting line.
+  const spawnOffset = getSpawnOffset();
+
+  carState.x -= Math.sin(carState.angle) * spawnOffset;
+  carState.z -= Math.cos(carState.angle) * spawnOffset;
+
+  updateCarMesh();
+
+  // Add your car, or update it if it already exists.
+  const { error } = await supabaseClient
+    .from("race_cars")
+    .upsert(
+      {
+        party_code: currentPartyCode,
+        player_id: playerId,
+        player_name: currentPlayerName || "Racer",
+        car_x: carState.x,
+        car_z: carState.z,
+        car_angle: carState.angle,
+        updated_at: new Date().toISOString()
+      },
+      {
+        onConflict: "party_code,player_id"
+      }
+    );
+
+  if (error) {
+    console.log("Could not add online car:", error);
+  }
+
+  // Load cars which were already added by friends.
+  const { data: cars, error: loadError } = await supabaseClient
+    .from("race_cars")
+    .select("*")
+    .eq("party_code", currentPartyCode);
+
+  if (!loadError && cars) {
+    for (const onlineCar of cars) {
+      if (onlineCar.player_id !== playerId) {
+        addOrMoveRemoteCar(onlineCar);
+      }
+    }
+  }
+}
+
+function listenForRemoteCars() {
+  supabaseClient
+    .channel("race-cars-" + currentPartyCode)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "race_cars",
+        filter: "party_code=eq." + currentPartyCode
+      },
+      (change) => {
+        const onlineCar = change.new;
+
+        // Do not create a second version of your own car.
+        if (!onlineCar || onlineCar.player_id === playerId) {
+          return;
+        }
+
+        addOrMoveRemoteCar(onlineCar);
+      }
+    )
+    .subscribe();
+}
+
+function makeRemoteCar(playerName) {
+  const group = new THREE.Group();
+
+  // Blue body, so friends' cars look different from your red car.
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.65, 4),
+    new THREE.MeshStandardMaterial({
+      color: 0x247bff,
+      roughness: 0.6
+    })
+  );
+
+  body.position.y = 0.8;
+  group.add(body);
+
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(1.55, 0.55, 1.85),
+    new THREE.MeshStandardMaterial({
+      color: 0x202a38,
+      roughness: 0.3
+    })
+  );
+
+  roof.position.set(0, 1.35, -0.2);
+  group.add(roof);
+
+  const wheelMaterial = new THREE.MeshStandardMaterial({
+    color: 0x151515
+  });
+
+  const wheelPositions = [
+    [-1.12, 0.45, -1.35],
+    [1.12, 0.45, -1.35],
+    [-1.12, 0.45, 1.35],
+    [1.12, 0.45, 1.35]
+  ];
+
+  for (const position of wheelPositions) {
+    const wheel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.45, 0.45, 0.35, 8),
+      wheelMaterial
+    );
+
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(position[0], position[1], position[2]);
+    group.add(wheel);
+  }
+
+  // A name label above the friend's car.
+  const label = makeNameLabel(playerName);
+  label.position.set(0, 3.2, 0);
+  group.add(label);
+
+  scene.add(group);
+
+  return group;
+}
+
+function makeNameLabel(name) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+
+  const context = canvas.getContext("2d");
+
+  context.fillStyle = "#102033";
+  context.fillRect(0, 0, 256, 64);
+
+  context.fillStyle = "white";
+  context.font = "bold 30px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(name, 128, 32);
+
+  const texture = new THREE.CanvasTexture(canvas);
+
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true
+    })
+  );
+
+  sprite.scale.set(5, 1.25, 1);
+
+  return sprite;
+}
+
+function addOrMoveRemoteCar(onlineCar) {
+  let friendCar = remoteCars.get(onlineCar.player_id);
+
+  if (!friendCar) {
+    friendCar = makeRemoteCar(onlineCar.player_name);
+    remoteCars.set(onlineCar.player_id, friendCar);
+  }
+
+  // Save the target position. The car will glide toward it.
+  friendCar.userData.targetX = onlineCar.car_x;
+  friendCar.userData.targetZ = onlineCar.car_z;
+  friendCar.userData.targetAngle = onlineCar.car_angle;
+}
+
+async function sendCarPosition() {
+  if (!currentPartyCode || raceFinished) {
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("race_cars")
+    .update({
+      car_x: carState.x,
+      car_z: carState.z,
+      car_angle: carState.angle,
+      updated_at: new Date().toISOString()
+    })
+    .eq("party_code", currentPartyCode)
+    .eq("player_id", playerId);
+
+  if (error) {
+    console.log("Could not send car position:", error);
+  }
+}
+
+function moveRemoteCars() {
+  for (const friendCar of remoteCars.values()) {
+    const targetX = friendCar.userData.targetX;
+    const targetZ = friendCar.userData.targetZ;
+    const targetAngle = friendCar.userData.targetAngle;
+
+    if (targetX === undefined) {
+      continue;
+    }
+
+    // Smooths the movement instead of making it jump.
+    friendCar.position.x += (targetX - friendCar.position.x) * 0.18;
+    friendCar.position.z += (targetZ - friendCar.position.z) * 0.18;
+
+    friendCar.rotation.y = targetAngle;
+  }
+}
+
     function makeCar() {
       car = new THREE.Group();
 
@@ -1163,12 +1402,21 @@
 
       const delta = Math.min((time - previousTime) / 1000, 0.05);
       previousTime = time;
+updateCountdown();
+updateCar(delta);
+updateHud();
+moveRemoteCars();
 
-      updateCountdown();
-      updateCar(delta);
-      updateHud();
+// Send your position 10 times each second.
+// Sending every single frame would be too much.
+carUpdateTimer += delta;
 
-      renderer.render(scene, camera);
+if (carUpdateTimer >= 0.1) {
+  carUpdateTimer = 0;
+  sendCarPosition();
+}
+
+renderer.render(scene, camera);
     }
 
     function updateCountdown() {
